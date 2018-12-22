@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <script src="d3.v4.min.js"></script>
+        <style>
+            
+            body {
+                position: fixed;
+                margin: 0;
+                padding: 0;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                left: 0; 
+            }
+            
+            #toolbox {
+                position: absolute;
+                z_index: 0;
+                left: 0;
+                top: 0;
+                width: 300px;
+                margin: 16px;
+                padding: 8px;
+                background: #222244;
+                border-radius: 8px 4px 8px 4px;
+                color: #ddddee;
+                font-family: sans-serif;
+            }
+            
+            #classes div {
+                cursor: pointer;
+            }
+            
+            svg {
+                z-index: 1;
+            }
+            
+            .box {
+                fill: none;
+                stroke: rgba(128, 128, 128, 0.8);
+                stroke-width: 8;
+            }
+            
+            .drawing {
+                fill: rgba(128, 128, 128, 0.5);
+            }
+            
+        </style>
+    </head>
+    <body>
+        <div id="toolbox">
+            <div id="classes"></div>
+        </div>
+        
+        <script>
+            
+            // Parameters
+            const MIN_SIZE = 16;
+            
+            // Prepare toolbox
+            var toolbox = d3.select('#toolbox')
+                .on('mousedown', () => d3.event.stopPropagation());
+            // TODO prepare buttons
+            var classes = d3.select('#classes');
+            
+            // Create SVG root container
+            var body = d3.select('body');
+            var svg = body
+                .append('svg')
+                .on('contextmenu', () => d3.event.preventDefault())
+                .attr('width', '100%')
+                .attr('height', '100%')
+                .call(d3.zoom()
+                    .on('zoom', function () {
+                        svg.attr('transform', d3.event.transform)
+                    })
+                    .filter(function () {
+                        return d3.event.type == 'wheel' || d3.event.button > 0;
+                    })
+                )
+                .append('g');
+            
+            // Keep reference on current sample
+            var sample = null;
+            var container = null;
+            var boxes = null;
+            var drawing = null;
+            var selection = null;
+            var edition = null;
+            
+            // Acquire new sample
+            async function download() {
+                
+                // Ask service
+                let payload = await request('GET', '/api/annotation');
+                sample = JSON.parse(payload.body);
+                
+                // Update classes from metadata
+                let cs = [{
+                    id: null,
+                    label: '<none>',
+                    color: '#808080'
+                }];
+                if (sample.metadata.classes)
+                    for (let i = 0; i < sample.metadata.classes.length; ++i)
+                        cs.push(sample.metadata.classes[i]);
+                classes
+                    .selectAll('div')
+                    .remove();
+                classes
+                    .selectAll('div')
+                    .data(cs, c => c.id)
+                    .enter()
+                    .append('div')
+                    .text(c => c.label || c.id)
+                    .style('color', c => c.color);
+                    // TODO make labels selectable (which change current selection label)
+                
+                // Acquire image properties
+                let data = 'data:' + sample.image.mime_type + ';base64,' + sample.image.data;
+                let size = await getImageSize(data)
+                
+                // Recreate sample container
+                if (container)
+                    container.remove();
+                container = svg.append('g');
+                drawing = null;
+                selection = null;
+                edition = null;
+                
+                // Add image
+                container
+                    .append('image')
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', size.width)
+                    .attr('height', size.height)
+                    .attr('xlink:href', data);
+                
+                // Add boxes
+                boxes = container.append('g');
+                for (let i = 0; i < sample.boxes.length; ++i)
+                    addBox(sample.boxes[i]);
+                
+                // Add drawing capabilities
+                body
+                    .on('mousedown', function () {
+                        
+                        // Left button on background begins box drawing
+                        if (d3.event.button == 0) {
+                            let m = d3.mouse(container.node());
+                            let x = m[0];
+                            let y = m[1];
+                            let rect = container.append('rect')
+                                .attr('class', 'drawing')
+                                .attr('x', x)
+                                .attr('y', y)
+                                .attr('width', 0)
+                                .attr('height', 0);
+                            drawing = {
+                                ax: x,
+                                ay: y,
+                                bx: x,
+                                by: y,
+                                rect: rect
+                            };
+                        }
+                    })
+                    .on('mousemove', function () {
+                        let m = d3.mouse(container.node());
+                        let x = m[0];
+                        let y = m[1];
+                        
+                        // Update drawing as mouse moves
+                        if (drawing) {
+                            drawing.bx = x;
+                            drawing.by = y;
+                            let left = Math.min(drawing.ax, drawing.bx);
+                            let top = Math.min(drawing.ay, drawing.by);
+                            let right = Math.max(drawing.ax, drawing.bx);
+                            let bottom = Math.max(drawing.ay, drawing.by);
+                            drawing.rect
+                                .attr('x', left)
+                                .attr('y', top)
+                                .attr('width', right - left)
+                                .attr('height', bottom - top);
+                        }
+                        
+                        // Edit selected box as mouse moves
+                        else if (edition) {
+                            
+                            // Translation
+                            if (edition.mode == 'translate') {
+                                selection
+                                    .attr('x', x - edition.anchorX)
+                                    .attr('y', y - edition.anchorY);
+                            }
+                            
+                            // TODO other edition modes, e.g. resize
+                        }
+                    })
+                    .on('mouseup', function () {
+                        
+                        // Finalize box drawing
+                        if (drawing) {
+                            let left = Math.min(drawing.ax, drawing.bx);
+                            let top = Math.min(drawing.ay, drawing.by);
+                            let right = Math.max(drawing.ax, drawing.bx);
+                            let bottom = Math.max(drawing.ay, drawing.by);
+                            let width = Math.max(right - left, MIN_SIZE);
+                            let height = Math.max(bottom - top, MIN_SIZE);
+                            addBox({
+                                x: left,
+                                y: top,
+                                width: width,
+                                height: height
+                            });
+                            drawing.rect.remove();
+                            drawing = null;
+                        }
+                        
+                        // Finalize box edition
+                        edition = null;
+                    });
+                
+            }
+            
+            // Add a new box at specified location
+            function addBox(box) {
+                boxes
+                    .append('rect')
+                    .attr('class', 'box')
+                    .attr('x', box.x)
+                    .attr('y', box.y)
+                    .attr('width', box.width)
+                    .attr('height', box.height)
+                    // TODO add label/color from current class
+                    
+                    // Define selection/edition behavior
+                    .on('mousedown', function () {
+                        d3.event.stopPropagation();
+                        selection = d3.select(this);
+                        // TODO unhighlight previous box, highlight new one
+                        let m = d3.mouse(this);
+                        let x = m[0];
+                        let y = m[1];
+                        edition = {
+                            mode: 'translate',
+                            anchorX: x - selection.attr('x'),
+                            anchorY: y - selection.attr('y')
+                        };
+                        // TODO handle resize
+                    });
+            }
+            
+            // Upload current sample
+            async function upload() {
+                
+                // Collect boxes
+                let bs = [];
+                boxes
+                    .selectAll('rect')
+                    .each(function () {
+                        let b = {
+                            x: this.x.baseVal.value,
+                            y: this.y.baseVal.value,
+                            width: this.width.baseVal.value,
+                            height: this.height.baseVal.value
+                        };
+                        bs.push(b);
+                    });
+                
+                // Prepare payload
+                let payload = {
+                    name: sample.name,
+                    boxes: bs
+                };
+                payload = JSON.stringify(payload);
+                
+                // Send to service
+                let result = await request('POST', '/api/annotation', payload);
+                return result.ok;
+            }
+            
+            // Asynchronous HTTP request
+            function request(method, url, body) {
+                return new Promise(function (resolve, reject) {
+                    let xhr = new XMLHttpRequest();
+                    xhr.open(method, url);
+                    xhr.onload = function () {
+                        if (this.status >= 200 && this.status < 300) {
+                            resolve({
+                                status: this.status,
+                                body: xhr.response
+                            });
+                        } else {
+                            reject({
+                                status: this.status,
+                                body: xhr.statusText
+                            });
+                        }
+                    };
+                    xhr.onerror = function () {
+                        reject({
+                            status: this.status,
+                            body: null
+                        });
+                    };
+                    xhr.send(body);
+                });
+            }
+            
+            // Get image size
+            function getImageSize(data) {
+                return new Promise(function (resolve, reject) {
+                    let image = new Image();
+                    image.onload = function () {
+                        resolve({
+                            width: image.width,
+                            height: image.height
+                        });
+                    };
+                    image.onerror = function () {
+                        reject();
+                    }
+                    image.src = data;
+                });
+            }
+            
+            // Start by downloading something
+            download();
+            
+        </script>
+    </body>
+</html>
