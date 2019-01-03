@@ -38,9 +38,15 @@
             }
             
             .box {
-                fill: none;
-                stroke: rgba(128, 128, 128, 0.8);
-                stroke-width: 8;
+                
+            }
+            
+            .box-decoration {
+                
+            }
+            
+            .box-label {
+                
             }
             
             .drawing {
@@ -61,7 +67,7 @@
         <script>
             
             // Parameters
-            const MIN_SIZE = 16;
+            const MIN_SIZE = 56;
             
             // Prepare toolbox
             var toolbox = d3.select('#toolbox')
@@ -118,6 +124,8 @@
                 if (sample.metadata.classes)
                     for (let i = 0; i < sample.metadata.classes.length; ++i) {
                         let c = sample.metadata.classes[i];
+                        if (!c.label)
+                            c.label = '' + c.id;
                         classMap[c.id] = c;
                         classList.push(c);
                     }
@@ -257,7 +265,7 @@
                 
                 // Update properties
                 .merge(s)
-                    .text(c => c.label || c.id)
+                    .text(c => c.label)
                     .style('color', c => c.color)
                     .style('font-weight', c => c.id == selectedClass ? 'bold' : 'normal')
                     
@@ -277,7 +285,7 @@
             // Update box markers
             function updateBoxes() {
                 let s = boxes
-                    .selectAll('rect')
+                    .selectAll('g')
                     .data(sample.boxes);
                 
                 // Remove unwanted boxes
@@ -285,19 +293,29 @@
                     .remove();
                 
                 // Create structure
-                s.enter()
+                let e = s.enter()
+                    .append('g');
+                e
                     .append('rect')
-                    .attr('class', 'box')
-                    // TODO add label
+                    .attr('class', 'box');
+                e
+                    .append('path')
+                    .attr('class', 'box-decoration');
+                e
+                    .append('text')
+                    .attr('class', 'box-label');
                 
-                // Update properties
-                .merge(s)
+                // Update box properties
+                let m = e.merge(s);
+                m.select('.box')
                     .attr('x', b => b.x)
                     .attr('y', b => b.y)
                     .attr('width', b => b.width)
                     .attr('height', b => b.height)
-                    .style('stroke', b => classMap[b.label || null].color)
-                    .style('stroke-dasharray', (b, i) => i == selection ? '8 4' : '')
+                    .style('fill', 'rgba(0, 0, 0, 0.0)')
+                    //.style('stroke', b => classMap[b.label || null].color)
+                    //.style('stroke-width', 8)
+                    //.style('stroke-dasharray', (b, i) => i == selection ? '8 4' : '')
                     // TODO update label
                 
                     // On click, select box for edition
@@ -315,6 +333,56 @@
                         // TODO handle resize when clicking on border
                         updateBoxes();
                     });
+                
+                // Update decoration
+                m.select('.box-decoration')
+                    .style('fill', b => classMap[b.label || null].color)
+                    .attr('d', function (b) {
+                        
+                        function corner(ox, oy, xx, xy, yx, yy) {
+                            let buffer = 'M ' + ox + ' ' + oy;
+                            buffer += 'l ' + 2 * xx + ' ' + 2 * xy;
+                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                            buffer += 'l ' + -0.5 * xx + ' ' + -0.5 * xy;
+                            buffer += 'l ' + 1 * yx + ' ' + 1 * yy;
+                            buffer += 'l ' + -0.5 * xx + ' ' + -0.5 * xy;
+                            buffer += 'z';
+                            return buffer;
+                        }
+                        
+                        function border(ox, oy, xx, xy, yx, yy) {
+                            let buffer = 'M ' + (ox - 1.5 * xx) + ' ' + (oy - 1.5 * xy);
+                            buffer += 'l ' + 3 * xx + ' ' + 3 * xy;
+                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                            buffer += 'l ' + -0.5 * yx + ' ' + -0.5 * yy;
+                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                            buffer += 'z';
+                            return buffer;
+                        }
+                        
+                        const unit = MIN_SIZE / 7;
+                        let d =
+                            corner(b.x, b.y, unit, 0, 0, unit) +
+                            corner(b.x + b.width, b.y, -unit, 0, 0, unit) +
+                            corner(b.x + b.width, b.y + b.height, -unit, 0, 0, -unit) +
+                            corner(b.x, b.y + b.height, unit, 0, 0, -unit) +
+                            border(b.x + 0.5 * b.width, b.y, unit, 0, 0, unit) +
+                            border(b.x, b.y + 0.5 * b.height, 0, unit, unit, 0) +
+                            border(b.x + 0.5 * b.width, b.y + b.height, unit, 0, 0, -unit) +
+                            border(b.x + b.width, b.y + 0.5 * b.height, 0, unit, -unit, 0);
+                        return d;
+                    })
+                
+                // Update label
+                m.select('.box-label')
+                    .attr('x', b => b.x)
+                    .attr('y', b => b.y)
+                    .text(b => classMap[b.label || null].label);
                     
             }
             
