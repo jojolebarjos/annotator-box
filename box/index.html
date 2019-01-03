@@ -50,7 +50,9 @@
             }
             
             .box-label {
-                
+                font: 20px monospace;
+                pointer-events: none;
+                user-select: none;
             }
             
             .drawing {
@@ -108,7 +110,7 @@
             // Classes
             const DEFAULT_CLASS = {
                 id: null,
-                label: '<none>',
+                name: '<none>',
                 color: '#808080'
             };
             var classMap = {};
@@ -129,8 +131,8 @@
                 if (sample.metadata.classes)
                     for (let i = 0; i < sample.metadata.classes.length; ++i) {
                         let c = sample.metadata.classes[i];
-                        if (!c.label)
-                            c.label = '' + c.id;
+                        if (!c.name)
+                            c.name = '' + c.id;
                         classMap[c.id] = c;
                         classList.push(c);
                     }
@@ -282,7 +284,7 @@
                 
                 // Update properties
                 .merge(s)
-                    .text(c => c.label)
+                    .text(c => c.name)
                     .style('color', c => c.color)
                     .style('font-weight', c => c.id == selectedClass ? 'bold' : 'normal')
                     
@@ -317,6 +319,9 @@
                 boxes_e
                     .append('g')
                     .attr('class', 'box-anchors');
+                boxes_e
+                    .append('text')
+                    .attr('class', 'box-label');
                 
                 // Remove unwanted boxes
                 boxes_u.exit()
@@ -426,7 +431,12 @@
                         updateBoxes();
                     });
                 
-                // TODO show label
+                // Update label
+                boxes_m.select('.box-label')
+                    .attr('x', b => b.x + UNIT)
+                    .attr('y', b => b.y + UNIT + 16)
+                    .style('fill', b => classMap[b.label || null].color)
+                    .text(b => classMap[b.label || null].name);
                 
             }
             

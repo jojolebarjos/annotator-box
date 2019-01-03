@@ -24,12 +24,12 @@ Where `metadata.json` has the following format:
     "classes" : [
         {
             "id": "foo",
-            "label": "Foo",
+            "name": "Foo",
             "color": "red"
         },
         {
             "id": "bar",
-            "label": "Bar",
+            "name": "Bar",
             "color": "blue"
         }
     ]
