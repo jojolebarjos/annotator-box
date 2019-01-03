@@ -29,6 +29,13 @@
                 font-family: sans-serif;
             }
             
+            #user {
+                margin-top: 4px;
+                margin-bottom: 4px;
+                box-sizing: border-box;
+                width: 100%;
+            }
+            
             #classes div {
                 cursor: pointer;
                 user-select: none;
@@ -68,6 +75,7 @@
             <div>
                 <input type="button" value="Download" onclick="download()"/>
                 <input type="button" value="Upload" onclick="upload()"/>
+                <input id="user" type="text" placeholder="user"/>
             </div>
             <div id="classes"></div>
         </div>
@@ -83,6 +91,7 @@
                 .on('mousedown', () => d3.event.stopPropagation());
             // TODO prepare buttons for upload and download
             var classButtons = d3.select('#classes');
+            var userInput = d3.select('#user');
             
             // Create SVG root container
             var body = d3.select('body');
@@ -446,6 +455,9 @@
                     name: sample.name,
                     boxes: sample.boxes
                 };
+                let user = userInput.property('value');
+                if (user)
+                    payload.user = user;
                 payload = JSON.stringify(payload);
                 
                 // Send to service
