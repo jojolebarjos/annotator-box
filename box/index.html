@@ -42,7 +42,7 @@
             }
             
             .box-ghost {
-                fill: rgba(0, 0, 0, 0.0);
+                fill: rgba(0, 0, 0, 0.2);
             }
             
             .box-anchors {
@@ -54,7 +54,7 @@
             }
             
             .drawing {
-                fill: rgba(128, 128, 128, 0.5);
+                fill: rgba(128, 128, 0, 0.2);
             }
             
         </style>
@@ -72,6 +72,7 @@
             
             // Parameters
             const MIN_SIZE = 56;
+            const UNIT = MIN_SIZE / 7;
             
             // Prepare toolbox
             var toolbox = d3.select('#toolbox')
@@ -311,7 +312,7 @@
                     .append('g')
                     .attr('class', 'box');
                 boxes_e
-                    .append('rect')
+                    .append('path')
                     .attr('class', 'box-ghost')
                 boxes_e
                     .append('g')
@@ -326,10 +327,15 @@
                 
                 // Update box ghost
                 boxes_m.select('.box-ghost')
-                    .attr('x', b => b.x)
-                    .attr('y', b => b.y)
-                    .attr('width', b => b.width)
-                    .attr('height', b => b.height)
+                    .attr('d', function (b) {
+                        let d =
+                            'M ' + b.x + ' ' + b.y +
+                            'h ' + b.width + 'v ' + b.height + 'h ' + -b.width + 'z' +
+                            'm ' + UNIT + ' ' + UNIT +
+                            'v ' + (b.height - 2 * UNIT) + 'h ' + (b.width - 2 * UNIT) + 'v ' + -(b.height - 2 * UNIT) + 'z';
+                        return d;
+                    })
+                    .style('fill', (b, i) => selection == i ? 'rgba(128, 128, 0, 0.2)' : 'rgba(0, 0, 0, 0.2)')
                     
                     // On click, select box for translation
                     .on('mousedown', function (b, i) {
@@ -346,7 +352,6 @@
                     });
                 
                 // Anchor drawing helpers
-                const unit = MIN_SIZE / 7;
                 function corner(ox, oy, xx, xy, yx, yy) {
                     let buffer = 'M ' + ox + ' ' + oy;
                     buffer += 'l ' + 2 * xx + ' ' + 2 * xy;
@@ -376,21 +381,21 @@
                 let anchors = boxes_m.select('.box-anchors')
                     .selectAll('path')
                     .data((b, i) => [
-                        {b: b, i: i, n: 'nw', c: 'nw-resize', d: () => corner(b.x, b.y, unit, 0, 0, unit),
+                        {b: b, i: i, n: 'nw', c: 'nw-resize', d: () => corner(b.x, b.y, UNIT, 0, 0, UNIT),
                             u: (e, x, y) => (e.p.x = x - edition.o.x, e.p.y = y - edition.o.y)},
-                        {b: b, i: i, n: 'ne', c: 'ne-resize', d: () => corner(b.x + b.width, b.y, 0, unit, -unit, 0),
+                        {b: b, i: i, n: 'ne', c: 'ne-resize', d: () => corner(b.x + b.width, b.y, 0, UNIT, -UNIT, 0),
                             u: (e, x, y) => (e.q.x = x - edition.o.x + edition.o.width, e.p.y = y - edition.o.y)},
-                        {b: b, i: i, n: 'se', c: 'se-resize', d: () => corner(b.x + b.width, b.y + b.height, -unit, 0, 0, -unit),
+                        {b: b, i: i, n: 'se', c: 'se-resize', d: () => corner(b.x + b.width, b.y + b.height, -UNIT, 0, 0, -UNIT),
                             u: (e, x, y) => (e.q.x = x - edition.o.x + edition.o.width, e.q.y = y - edition.o.y + edition.o.height)},
-                        {b: b, i: i, n: 'sw', c: 'sw-resize', d: () => corner(b.x, b.y + b.height, 0, -unit, unit, 0),
+                        {b: b, i: i, n: 'sw', c: 'sw-resize', d: () => corner(b.x, b.y + b.height, 0, -UNIT, UNIT, 0),
                             u: (e, x, y) => (e.p.x = x - edition.o.x, e.q.y = y - edition.o.y + edition.o.height)},
-                        {b: b, i: i, n: 'n', c: 'n-resize', d: () => border(b.x + 0.5 * b.width, b.y, unit, 0, 0, unit),
+                        {b: b, i: i, n: 'n', c: 'n-resize', d: () => border(b.x + 0.5 * b.width, b.y, UNIT, 0, 0, UNIT),
                             u: (e, x, y) => e.p.y = y - edition.o.y},
-                        {b: b, i: i, n: 'e', c: 'e-resize', d: () => border(b.x + b.width, b.y + 0.5 * b.height, 0, unit, -unit, 0),
+                        {b: b, i: i, n: 'e', c: 'e-resize', d: () => border(b.x + b.width, b.y + 0.5 * b.height, 0, UNIT, -UNIT, 0),
                             u: (e, x, y) => e.q.x = x - edition.o.x + edition.o.width},
-                        {b: b, i: i, n: 's', c: 's-resize', d: () => border(b.x + 0.5 * b.width, b.y + b.height, -unit, 0, 0, -unit),
+                        {b: b, i: i, n: 's', c: 's-resize', d: () => border(b.x + 0.5 * b.width, b.y + b.height, -UNIT, 0, 0, -UNIT),
                             u: (e, x, y) => e.q.y = y - edition.o.y + edition.o.height},
-                        {b: b, i: i, n: 'w', c: 'w-resize', d: () => border(b.x, b.y + 0.5 * b.height, 0, -unit, unit, 0),
+                        {b: b, i: i, n: 'w', c: 'w-resize', d: () => border(b.x, b.y + 0.5 * b.height, 0, -UNIT, UNIT, 0),
                             u: (e, x, y) => e.p.x = x - edition.o.x}
                     ]);
                 
