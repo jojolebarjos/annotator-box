@@ -8,6 +8,8 @@ import json
 import os
 import random
 
+from .util import now
+
 
 # Sample container
 class Data:
@@ -96,13 +98,18 @@ class Data:
     # Store sample
     async def add_annotation(self, annotation):
         def run():
+            
+            # Make sure useless data is stripped (custom user data is kept, for better or worse)
             copy = dict(annotation)
             if 'image' in copy:
                 del copy['image']
             if 'metadata' in copy:
                 del copy['metadata']
-            # TODO add timestamp
-            # TODO maybe validate content
+            
+            # Add/update timestamp
+            copy['timestamp'] = now().isoformat()
+            
+            # Append entry
             line = json.dumps(copy)
             with io.open(self.annotation_path, 'a', encoding='utf-8', newline='\n') as file:
                 file.write(f'{line}\n')
