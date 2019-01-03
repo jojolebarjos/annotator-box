@@ -62,8 +62,8 @@
             // Prepare toolbox
             var toolbox = d3.select('#toolbox')
                 .on('mousedown', () => d3.event.stopPropagation());
-            // TODO prepare buttons
-            var classes = d3.select('#classes');
+            // TODO prepare buttons for upload and download
+            var classButtons = d3.select('#classes');
             
             // Create SVG root container
             var body = d3.select('body');
@@ -90,6 +90,16 @@
             var selection = null;
             var edition = null;
             
+            // Classes
+            const DEFAULT_CLASS = {
+                index: 0,
+                id: null,
+                label: '<none>',
+                color: '#808080'
+            };
+            var classes = [DEFAULT_CLASS];
+            var currentClassIndex = 0;
+            
             // Acquire new sample
             async function download() {
                 
@@ -98,25 +108,16 @@
                 sample = JSON.parse(payload.body);
                 
                 // Update classes from metadata
-                let cs = [{
-                    id: null,
-                    label: '<none>',
-                    color: '#808080'
-                }];
+                classes = [DEFAULT_CLASS];
                 if (sample.metadata.classes)
-                    for (let i = 0; i < sample.metadata.classes.length; ++i)
-                        cs.push(sample.metadata.classes[i]);
-                classes
-                    .selectAll('div')
-                    .remove();
-                classes
-                    .selectAll('div')
-                    .data(cs, c => c.id)
-                    .enter()
-                    .append('div')
-                    .text(c => c.label || c.id)
-                    .style('color', c => c.color);
-                    // TODO make labels selectable (which change current selection label)
+                    for (let i = 0; i < sample.metadata.classes.length; ++i) {
+                        let c = sample.metadata.classes[i];
+                        c.index = i + 1;
+                        classes.push(c);
+                    }
+                if (currentClassIndex >= classes.length)
+                    currentClassIndex = 0;
+                updateClasses();
                 
                 // Acquire image properties
                 let data = 'data:' + sample.image.mime_type + ';base64,' + sample.image.data;
@@ -225,6 +226,27 @@
                         edition = null;
                     });
                 
+            }
+            
+            // Update class buttons
+            function updateClasses() {
+                let s = classButtons
+                    .selectAll('div')
+                    .data(classes, c => c.id);
+                s.exit()
+                    .remove();
+                s.enter()
+                    .append('div')
+                .merge(s)
+                    .text(c => c.label || c.id)
+                    .style('color', c => c.color)
+                    .style('font-weight', c => c.index == currentClassIndex ? 'bold' : 'normal')
+                    .on('click', function (c) {
+                        currentClassIndex = c.index;
+                        updateClasses();
+                        if (selection)
+                            selection.style('stroke', c.color);
+                    });
             }
             
             // Add a new box at specified location
