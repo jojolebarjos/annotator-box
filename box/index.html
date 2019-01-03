@@ -92,31 +92,33 @@
             
             // Classes
             const DEFAULT_CLASS = {
-                index: 0,
                 id: null,
                 label: '<none>',
                 color: '#808080'
             };
-            var classes = [DEFAULT_CLASS];
-            var currentClassIndex = 0;
+            var classMap = {};
+            var classList = [];
+            var selectedClass = null;
             
             // Acquire new sample
             async function download() {
                 
-                // Ask service
+                // Ask service for new sample
                 let payload = await request('GET', '/api/annotation');
                 sample = JSON.parse(payload.body);
                 
                 // Update classes from metadata
-                classes = [DEFAULT_CLASS];
+                classMap = {};
+                classMap[DEFAULT_CLASS.id] = DEFAULT_CLASS;
+                classList = [DEFAULT_CLASS];
                 if (sample.metadata.classes)
                     for (let i = 0; i < sample.metadata.classes.length; ++i) {
                         let c = sample.metadata.classes[i];
-                        c.index = i + 1;
-                        classes.push(c);
+                        classMap[c.id] = c;
+                        classList.push(c);
                     }
-                if (currentClassIndex >= classes.length)
-                    currentClassIndex = 0;
+                if (!(selectedClass in classMap))
+                    selectedClass = null;
                 updateClasses();
                 
                 // Acquire image properties
@@ -142,8 +144,7 @@
                 
                 // Add boxes
                 boxes = container.append('g');
-                for (let i = 0; i < sample.boxes.length; ++i)
-                    addBox(sample.boxes[i]);
+                updateBoxes();
                 
                 // Add drawing capabilities
                 body
@@ -194,9 +195,10 @@
                             
                             // Translation
                             if (edition.mode == 'translate') {
-                                selection
-                                    .attr('x', x - edition.anchorX)
-                                    .attr('y', y - edition.anchorY);
+                                let b = sample.boxes[selection];
+                                b.x = x - edition.anchorX;
+                                b.y = y - edition.anchorY;
+                                updateBoxes();
                             }
                             
                             // TODO other edition modes, e.g. resize
@@ -210,16 +212,23 @@
                             let top = Math.min(drawing.ay, drawing.by);
                             let right = Math.max(drawing.ax, drawing.bx);
                             let bottom = Math.max(drawing.ay, drawing.by);
-                            let width = Math.max(right - left, MIN_SIZE);
-                            let height = Math.max(bottom - top, MIN_SIZE);
-                            addBox({
-                                x: left,
-                                y: top,
-                                width: width,
-                                height: height
-                            });
+                            let width = right - left;
+                            let height = bottom - top;
                             drawing.rect.remove();
                             drawing = null;
+                            if (width >= MIN_SIZE && height >= MIN_SIZE) {
+                                selection = sample.boxes.length;
+                                sample.boxes.push({
+                                    x: left,
+                                    y: top,
+                                    width: width,
+                                    height: height,
+                                    label: selectedClass
+                                });
+                                
+                            } else
+                                selection = null;
+                            updateBoxes();
                         }
                         
                         // Finalize box edition
@@ -232,72 +241,86 @@
             function updateClasses() {
                 let s = classButtons
                     .selectAll('div')
-                    .data(classes, c => c.id);
+                    .data(classList, c => c.id);
+                
+                // Remove unwanted labels
                 s.exit()
                     .remove();
+                
+                // Add containers
                 s.enter()
                     .append('div')
+                
+                // Update properties
                 .merge(s)
                     .text(c => c.label || c.id)
                     .style('color', c => c.color)
-                    .style('font-weight', c => c.index == currentClassIndex ? 'bold' : 'normal')
+                    .style('font-weight', c => c.id == selectedClass ? 'bold' : 'normal')
+                    
+                    // On click, select class
                     .on('click', function (c) {
-                        currentClassIndex = c.index;
+                        selectedClass = c.id;
                         updateClasses();
-                        if (selection)
-                            selection.style('stroke', c.color);
+                        if (selection != null) {
+                            let b = sample.boxes[selection];
+                            b.label = selectedClass;
+                            updateBoxes();
+                            console.log(b);
+                        }
                     });
             }
             
-            // Add a new box at specified location
-            function addBox(box) {
-                boxes
+            // Update box markers
+            function updateBoxes() {
+                let s = boxes
+                    .selectAll('rect')
+                    .data(sample.boxes);
+                
+                // Remove unwanted boxes
+                s.exit()
+                    .remove();
+                
+                // Create structure
+                s.enter()
                     .append('rect')
                     .attr('class', 'box')
-                    .attr('x', box.x)
-                    .attr('y', box.y)
-                    .attr('width', box.width)
-                    .attr('height', box.height)
-                    // TODO add label/color from current class
-                    
-                    // Define selection/edition behavior
-                    .on('mousedown', function () {
+                    // TODO add label
+                
+                // Update properties
+                .merge(s)
+                    .attr('x', b => b.x)
+                    .attr('y', b => b.y)
+                    .attr('width', b => b.width)
+                    .attr('height', b => b.height)
+                    .style('stroke', b => classMap[b.label || null].color)
+                    .style('stroke-dasharray', (b, i) => i == selection ? '8 4' : '')
+                    // TODO update label
+                
+                    // On click, select box for edition
+                    .on('mousedown', function (b, i) {
                         d3.event.stopPropagation();
-                        selection = d3.select(this);
-                        // TODO unhighlight previous box, highlight new one
                         let m = d3.mouse(this);
                         let x = m[0];
                         let y = m[1];
+                        selection = i;
                         edition = {
                             mode: 'translate',
-                            anchorX: x - selection.attr('x'),
-                            anchorY: y - selection.attr('y')
+                            anchorX: x - b.x,
+                            anchorY: y - b.y
                         };
-                        // TODO handle resize
+                        // TODO handle resize when clicking on border
+                        updateBoxes();
                     });
+                    
             }
             
             // Upload current sample
             async function upload() {
                 
-                // Collect boxes
-                let bs = [];
-                boxes
-                    .selectAll('rect')
-                    .each(function () {
-                        let b = {
-                            x: this.x.baseVal.value,
-                            y: this.y.baseVal.value,
-                            width: this.width.baseVal.value,
-                            height: this.height.baseVal.value
-                        };
-                        bs.push(b);
-                    });
-                
-                // Prepare payload
+                // Prepare payload, without unnecessary information
                 let payload = {
                     name: sample.name,
-                    boxes: bs
+                    boxes: sample.boxes
                 };
                 payload = JSON.stringify(payload);
                 
