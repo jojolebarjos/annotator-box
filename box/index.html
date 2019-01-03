@@ -140,10 +140,6 @@
                     selectedClass = null;
                 updateClasses();
                 
-                // Acquire image properties
-                let data = 'data:' + sample.image.mime_type + ';base64,' + sample.image.data;
-                let size = await getImageSize(data)
-                
                 // Recreate sample container
                 if (container)
                     container.remove();
@@ -153,13 +149,14 @@
                 edition = null;
                 
                 // Add image
+                let size = await getImageSize(sample.image);
                 container
                     .append('image')
                     .attr('x', 0)
                     .attr('y', 0)
                     .attr('width', size.width)
                     .attr('height', size.height)
-                    .attr('xlink:href', data);
+                    .attr('xlink:href', sample.image);
                 
                 // Add boxes
                 boxes = container.append('g');
@@ -296,7 +293,6 @@
                             let b = sample.boxes[selection];
                             b.label = selectedClass;
                             updateBoxes();
-                            console.log(b);
                         }
                     });
             }

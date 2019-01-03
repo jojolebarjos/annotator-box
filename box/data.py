@@ -69,8 +69,9 @@ class Data:
             path = os.path.join(self.image_folder, name)
             with io.open(path, 'rb') as file:
                 data = file.read()
-            data = base64.b64encode(data).decode('ascii')
+            content = base64.b64encode(data).decode('ascii')
             mime_type = 'image/jpeg'
+            data = f'data:{mime_type};base64,{content}'
             
             # Load current annotations
             annotations = self.get_annotations()
@@ -84,10 +85,7 @@ class Data:
             # Build payload
             payload = {
                 **annotation,
-                'image': {
-                    'data': data,
-                    'mime_type': mime_type
-                },
+                'image': data,
                 'metadata': metadata
             }
             return payload
