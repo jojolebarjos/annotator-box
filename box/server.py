@@ -43,6 +43,8 @@ async def post_api_annotation(request):
 # Run service
 def run(host, port, metadata_path, image_folder, annotation_path):
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        
+        # Create application
         app = web.Application()
         app.add_routes([
             web.get('/', static_handler(INDEX_HTML)),
@@ -53,7 +55,28 @@ def run(host, port, metadata_path, image_folder, annotation_path):
         app['executor'] = executor
         app['data'] = Data(metadata_path, image_folder, annotation_path, executor)
         app['annotation_path'] = annotation_path
-        web.run_app(app, host=host, port=port)
+        
+        # Start server
+        runner = web.AppRunner(app)
+        loop = asyncio.get_event_loop()
+        async def start():
+            await runner.setup()
+            site = web.TCPSite(runner, host, port)
+            await site.start()
+        loop.run_until_complete(start())
+        print(f'Running on {host}:{port}')
+        
+        # Run forever (hack to avoid blocking select on Windows with default loop)
+        async def foo():
+            while True:
+                await asyncio.sleep(1.0)
+        try:
+            loop.run_until_complete(foo())
+        except KeyboardInterrupt:
+            pass
+        
+        # Cleanup
+        loop.run_until_complete(runner.cleanup())
 
 
 # Standalone usage
