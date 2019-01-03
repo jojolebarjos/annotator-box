@@ -41,8 +41,12 @@
                 
             }
             
-            .box-decoration {
-                
+            .box-ghost {
+                fill: rgba(0, 0, 0, 0.0);
+            }
+            
+            .box-anchors {
+            
             }
             
             .box-label {
@@ -208,12 +212,24 @@
                             // Translation
                             if (edition.mode == 'translate') {
                                 let b = sample.boxes[selection];
-                                b.x = x - edition.anchorX;
-                                b.y = y - edition.anchorY;
+                                b.x = x - edition.o.x;
+                                b.y = y - edition.o.y;
                                 updateBoxes();
                             }
                             
-                            // TODO other edition modes, e.g. resize
+                            // Resizing
+                            if (edition.mode == 'resize') {
+                                edition.a.u(edition, x, y);
+                                let b = edition.a.b;
+                                let p = edition.p;
+                                let q = edition.q;
+                                b.x = Math.min(p.x, q.x);
+                                b.y = Math.min(p.y, q.y);
+                                b.width = Math.max(p.x, q.x) - b.x;
+                                b.height = Math.max(p.y, q.y) - b.y;
+                                updateBoxes();
+                            }
+                            
                         }
                     })
                     .on('mouseup', function () {
@@ -284,41 +300,38 @@
             
             // Update box markers
             function updateBoxes() {
-                let s = boxes
-                    .selectAll('g')
+                
+                // Select box containers
+                let boxes_u = boxes
+                    .selectAll('.box')
                     .data(sample.boxes);
                 
+                // Add containers for newcomers
+                let boxes_e = boxes_u.enter()
+                    .append('g')
+                    .attr('class', 'box');
+                boxes_e
+                    .append('rect')
+                    .attr('class', 'box-ghost')
+                boxes_e
+                    .append('g')
+                    .attr('class', 'box-anchors');
+                
                 // Remove unwanted boxes
-                s.exit()
+                boxes_u.exit()
                     .remove();
                 
-                // Create structure
-                let e = s.enter()
-                    .append('g');
-                e
-                    .append('rect')
-                    .attr('class', 'box');
-                e
-                    .append('path')
-                    .attr('class', 'box-decoration');
-                e
-                    .append('text')
-                    .attr('class', 'box-label');
+                // Select remaining boxes
+                let boxes_m = boxes_e.merge(boxes_u);
                 
-                // Update box properties
-                let m = e.merge(s);
-                m.select('.box')
+                // Update box ghost
+                boxes_m.select('.box-ghost')
                     .attr('x', b => b.x)
                     .attr('y', b => b.y)
                     .attr('width', b => b.width)
                     .attr('height', b => b.height)
-                    .style('fill', 'rgba(0, 0, 0, 0.0)')
-                    //.style('stroke', b => classMap[b.label || null].color)
-                    //.style('stroke-width', 8)
-                    //.style('stroke-dasharray', (b, i) => i == selection ? '8 4' : '')
-                    // TODO update label
-                
-                    // On click, select box for edition
+                    
+                    // On click, select box for translation
                     .on('mousedown', function (b, i) {
                         d3.event.stopPropagation();
                         let m = d3.mouse(this);
@@ -327,63 +340,89 @@
                         selection = i;
                         edition = {
                             mode: 'translate',
-                            anchorX: x - b.x,
-                            anchorY: y - b.y
+                            o: {x: x - b.x, y: y - b.y}
                         };
-                        // TODO handle resize when clicking on border
                         updateBoxes();
                     });
                 
-                // Update decoration
-                m.select('.box-decoration')
-                    .style('fill', b => classMap[b.label || null].color)
-                    .attr('d', function (b) {
-                        
-                        function corner(ox, oy, xx, xy, yx, yy) {
-                            let buffer = 'M ' + ox + ' ' + oy;
-                            buffer += 'l ' + 2 * xx + ' ' + 2 * xy;
-                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
-                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
-                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
-                            buffer += 'l ' + -0.5 * xx + ' ' + -0.5 * xy;
-                            buffer += 'l ' + 1 * yx + ' ' + 1 * yy;
-                            buffer += 'l ' + -0.5 * xx + ' ' + -0.5 * xy;
-                            buffer += 'z';
-                            return buffer;
-                        }
-                        
-                        function border(ox, oy, xx, xy, yx, yy) {
-                            let buffer = 'M ' + (ox - 1.5 * xx) + ' ' + (oy - 1.5 * xy);
-                            buffer += 'l ' + 3 * xx + ' ' + 3 * xy;
-                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
-                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
-                            buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
-                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
-                            buffer += 'l ' + -0.5 * yx + ' ' + -0.5 * yy;
-                            buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
-                            buffer += 'z';
-                            return buffer;
-                        }
-                        
-                        const unit = MIN_SIZE / 7;
-                        let d =
-                            corner(b.x, b.y, unit, 0, 0, unit) +
-                            corner(b.x + b.width, b.y, -unit, 0, 0, unit) +
-                            corner(b.x + b.width, b.y + b.height, -unit, 0, 0, -unit) +
-                            corner(b.x, b.y + b.height, unit, 0, 0, -unit) +
-                            border(b.x + 0.5 * b.width, b.y, unit, 0, 0, unit) +
-                            border(b.x, b.y + 0.5 * b.height, 0, unit, unit, 0) +
-                            border(b.x + 0.5 * b.width, b.y + b.height, unit, 0, 0, -unit) +
-                            border(b.x + b.width, b.y + 0.5 * b.height, 0, unit, -unit, 0);
-                        return d;
-                    })
+                // Anchor drawing helpers
+                const unit = MIN_SIZE / 7;
+                function corner(ox, oy, xx, xy, yx, yy) {
+                    let buffer = 'M ' + ox + ' ' + oy;
+                    buffer += 'l ' + 2 * xx + ' ' + 2 * xy;
+                    buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                    buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                    buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                    buffer += 'l ' + -0.5 * xx + ' ' + -0.5 * xy;
+                    buffer += 'l ' + 1 * yx + ' ' + 1 * yy;
+                    buffer += 'l ' + -0.5 * xx + ' ' + -0.5 * xy;
+                    buffer += 'z';
+                    return buffer;
+                }
+                function border(ox, oy, xx, xy, yx, yy) {
+                    let buffer = 'M ' + (ox - 1.5 * xx) + ' ' + (oy - 1.5 * xy);
+                    buffer += 'l ' + 3 * xx + ' ' + 3 * xy;
+                    buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                    buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                    buffer += 'l ' + 0.5 * yx + ' ' + 0.5 * yy;
+                    buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                    buffer += 'l ' + -0.5 * yx + ' ' + -0.5 * yy;
+                    buffer += 'l ' + -1 * xx + ' ' + -1 * xy;
+                    buffer += 'z';
+                    return buffer;
+                }
                 
-                // Update label
-                m.select('.box-label')
-                    .attr('x', b => b.x)
-                    .attr('y', b => b.y)
-                    .text(b => classMap[b.label || null].label);
+                // Select anchors
+                let anchors = boxes_m.select('.box-anchors')
+                    .selectAll('path')
+                    .data((b, i) => [
+                        {b: b, i: i, n: 'nw', c: 'nw-resize', d: () => corner(b.x, b.y, unit, 0, 0, unit),
+                            u: (e, x, y) => (e.p.x = x - edition.o.x, e.p.y = y - edition.o.y)},
+                        {b: b, i: i, n: 'ne', c: 'ne-resize', d: () => corner(b.x + b.width, b.y, 0, unit, -unit, 0),
+                            u: (e, x, y) => (e.q.x = x - edition.o.x + edition.o.width, e.p.y = y - edition.o.y)},
+                        {b: b, i: i, n: 'se', c: 'se-resize', d: () => corner(b.x + b.width, b.y + b.height, -unit, 0, 0, -unit),
+                            u: (e, x, y) => (e.q.x = x - edition.o.x + edition.o.width, e.q.y = y - edition.o.y + edition.o.height)},
+                        {b: b, i: i, n: 'sw', c: 'sw-resize', d: () => corner(b.x, b.y + b.height, 0, -unit, unit, 0),
+                            u: (e, x, y) => (e.p.x = x - edition.o.x, e.q.y = y - edition.o.y + edition.o.height)},
+                        {b: b, i: i, n: 'n', c: 'n-resize', d: () => border(b.x + 0.5 * b.width, b.y, unit, 0, 0, unit),
+                            u: (e, x, y) => e.p.y = y - edition.o.y},
+                        {b: b, i: i, n: 'e', c: 'e-resize', d: () => border(b.x + b.width, b.y + 0.5 * b.height, 0, unit, -unit, 0),
+                            u: (e, x, y) => e.q.x = x - edition.o.x + edition.o.width},
+                        {b: b, i: i, n: 's', c: 's-resize', d: () => border(b.x + 0.5 * b.width, b.y + b.height, -unit, 0, 0, -unit),
+                            u: (e, x, y) => e.q.y = y - edition.o.y + edition.o.height},
+                        {b: b, i: i, n: 'w', c: 'w-resize', d: () => border(b.x, b.y + 0.5 * b.height, 0, -unit, unit, 0),
+                            u: (e, x, y) => e.p.x = x - edition.o.x}
+                    ]);
+                
+                // Add anchors for new containers
+                anchors.enter()
+                    .append('path')
+                    .style('cursor', a => a.c)
+                
+                // Update location for all anchors
+                .merge(anchors)
+                    .style('fill', a => classMap[a.b.label || null].color)
+                    .attr('d', a => a.d())
                     
+                    // On click, select box for resize
+                    .on('mousedown', function (a) {
+                        d3.event.stopPropagation();
+                        let m = d3.mouse(this);
+                        let x = m[0];
+                        let y = m[1];
+                        selection = a.i;
+                        edition = {
+                            mode: 'resize',
+                            a: a,
+                            o: {x: x - a.b.x, y: y - a.b.y, width: a.b.width, height: a.b.height},
+                            p: {x: a.b.x, y: a.b.y},
+                            q: {x: a.b.x + a.b.width, y: a.b.y + a.b.height}
+                        };
+                        updateBoxes();
+                    });
+                
+                // TODO show label
+                
             }
             
             // Upload current sample
