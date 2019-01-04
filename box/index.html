@@ -128,6 +128,19 @@
             var classList = [];
             var selectedClass = null;
             
+            // Delete can be used to remove selected box
+            document.onkeydown = function (e) {
+                if (e.target.tagName.toLowerCase() == 'input')
+                    return;
+                if (e.key == 'Delete') {
+                    if (selection != null && !drawing && !edition) {
+                        sample.boxes.splice(selection, 1);
+                        selection = null;
+                        updateBoxes();
+                    }
+                }
+            };
+            
             // Acquire new sample
             async function download() {
                 
